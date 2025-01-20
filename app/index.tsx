@@ -1,22 +1,38 @@
 import { Text, View, TextInput, Button, StyleSheet, TouchableOpacity } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { router } from 'expo-router';
+import { useEffect } from 'react';
+import Toast from 'react-native-toast-message';
 
 const HomePage = () => {
     const {
         control,
         handleSubmit,
         formState: { errors },
-    } = useForm();
+    } = useForm({
+        defaultValues: {
+            username: 'dummyUser', // Set the dummy username
+            password: 'dummyPassword123', // Set the dummy password
+        },
+    });
+
+    useEffect(() => {
+        Toast.show({
+            type: 'success',
+            text1: 'Hello',
+            text2: 'This is something 👋',
+            visibilityTime: 10000,
+        }); 
+    }, []);
 
     const onSubmit = (userData) => {
         try {
             // console.log(data);
 
-            setTimeout(() => {
-                console.log('User logged in successfully');
-                router.push('/qr/scan');
-            }, 1000);
+            // setTimeout(() => {
+            console.log('User logged in successfully');
+            router.push('/qr/scan');
+            // }, 10);
         } catch (err) {
             console.log(err);
         }
