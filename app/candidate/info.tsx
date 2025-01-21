@@ -1,7 +1,33 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, Button, TouchableOpacity } from 'react-native';
+import axios from 'axios';
+import { CameraType, CameraView, useCameraPermissions } from 'expo-camera';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useRef, useState } from 'react';
+import * as FileSystem from 'expo-file-system';
+import Svg, { Path } from 'react-native-svg';
 
-const CandidateInfo = ({ sourceUrl }: { sourceUrl: string }) => {
+import {
+    View,
+    Text,
+    StyleSheet,
+    Image,
+    ScrollView,
+    Button,
+    TouchableOpacity,
+    Platform,
+} from 'react-native';
+
+const CandidateInfo = ({
+    sourceUrl,
+    isCameraOpen,
+    setIsCameraOpen,
+    hallticketData,
+}: {
+    sourceUrl: string;
+    isCameraOpen: Boolean;
+    setIsCameraOpen: any;
+    hallticketData: any;
+}) => {
+    const { p: process, ca: candidate, ht: hallticket, slot, s3BucketUrl } = hallticketData;
     // Extracting query parameters from the source URL if necessary
     const extractQueryParams = (url: string) => {
         const params = new URLSearchParams(new URL(url).search);
@@ -13,90 +39,320 @@ const CandidateInfo = ({ sourceUrl }: { sourceUrl: string }) => {
 
     const { registrationId, formId } = extractQueryParams(sourceUrl);
 
+    const [permission, requestPermission] = useCameraPermissions();
+
+    const [isPictureTaken, setIsPictureTaken] = useState<boolean>(false);
+    const [photoUri, setPhotoUri] = useState<string>(''); // To store the captured photo URI
+    const [facing, setFacing] = useState<CameraType>('back'); // To toggle between front and back camera
+    const cameraRef = useRef(null); // Reference for the camera
+
+    const [isCandidateApproved, setIsCandidateApproved] = useState(false);
+    let [justApproved, setJustApproved] = useState(false);
+
+    useEffect(() => {
+        if (hallticket.ca_is_approved != 'NO') {
+            setIsCandidateApproved(true);
+            setIsPictureTaken(true);
+        } else {
+            setIsCandidateApproved(false);
+            setIsPictureTaken(true);
+
+
+        }
+    }, []);
+
+    if (!permission) {
+        return (
+            <View>
+                <Text>This is htis</Text>
+            </View>
+        );
+    }
+
+    if (!permission.granted) {
+        return (
+            <View style={styles.container}>
+                <Text style={styles.message}>We need your permission to show the camera</Text>
+                <Button onPress={requestPermission} title="grant permission" />
+            </View>
+        );
+    }
+
+    // Toggle camera between front and back
+    const toggleCameraFacing = () => {
+        setFacing((prevFacing) => (prevFacing === 'front' ? 'back' : 'front'));
+    };
+
+    // Take a picture using the camera
+    const handleTakePicture = async () => {
+        if (cameraRef.current) {
+            const data = await cameraRef.current.takePictureAsync();
+            setPhotoUri(data.uri);
+            console.log(data);
+            setIsPictureTaken(true);
+            setIsCameraOpen(false);
+        }
+    };
+    // Retake the picture
+    const retakePicture = () => {
+        setPhotoUri(null);
+        setIsPictureTaken(false);
+    };
+
+    // Save the picture (add functionality as needed, e.g., upload or local save)
+    const savePicture = () => {
+        console.log('Picture saved:', photoUri);
+        setIsCameraOpen(false); // Close camera after saving
+    };
+
     // Handle the approve action (Placeholder for axios call later)
-    const handleApprove = () => {
-        console.log('Approve clicked');
-        // Add axios call or any other action here later
+    const handleApprove = async () => {
+        try {
+            let baseUrl = process[0]?.p_form_filling_site;
+            let url = `${baseUrl}/api/save-approval-details`;
+            const sendData = new FormData();
+            sendData.set('rollNo', hallticket.ca_roll_number);
+            sendData.set('f_id', hallticket.id);
+            sendData.set('r_id', hallticket.ca_reg_id);
+
+            const fileInfo = await FileSystem.readAsStringAsync(photoUri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+
+            console.log(photoUri);
+            // Convert the base64 data to a binary string or directly send the photo file
+            const candidatePhotoFile = {
+                uri: photoUri, // URI of the photo
+                type: 'image/jpeg', // Specify the file type
+                name: 'photo.jpg', // Specify the file name (optional)
+            };
+            sendData.set('candidatePhoto', candidatePhotoFile);
+
+            // Add axios call or any other action here later
+
+            const { data } = await axios.post(url, sendData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+
+            console.log(data);
+
+            const { success } = data;
+            if (success) {
+                setIsCandidateApproved(true);
+                setJustApproved(true);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+    const handleApprove3 = async () => {
+        try {
+            let baseUrl = process[0]?.p_form_filling_site;
+            let url = `${baseUrl}/api/save-approval-details`;
+            const sendData = new FormData();
+
+            // Add data fields to the FormData
+            sendData.set('rollNo', hallticket.ca_roll_number);
+            sendData.set('f_id', hallticket.id);
+            sendData.set('r_id', hallticket.ca_reg_id);
+
+            // Add the photo as a file using URI (no need to convert it to Base64)
+            const candidatePhotoFile = {
+                uri: photoUri, // The URI of the image
+                type: 'image/jpeg', // MIME type of the file
+                name: 'photo.jpg', // The file name
+            };
+
+            // Append the photo file to FormData
+            sendData.set('candidatePhoto', candidatePhotoFile);
+
+            // Perform the API request
+            const { data } = await axios.post(url, sendData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+
+            console.log('Response data:', data); // Log the response from the backend
+        } catch (err) {
+            console.error('Error uploading photo:', err);
+        }
     };
 
     return (
         <View style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContainer}>
-                <ScrollView style={styles.scrollView}>
-                    <View style={styles.ticket}>
-                        {/* Image placeholder for user photo and signature side by side */}
-                        <View style={styles.photoAndSignContainer}>
-                            {/* User Photo */}
-                            <Image
-                                style={styles.photo}
-                                source={{
-                                    uri: 'https://pinnacle.works/wp-content/uploads/2022/06/dummy-image.jpg',
-                                }}
-                            />
-
-                            {/* Signature Image */}
-                            <Image
-                                style={styles.photo}
-                                source={{
-                                    uri: 'https://pinnacle.works/wp-content/uploads/2022/06/dummy-image.jpg', // Placeholder for signature image
-                                }}
-                            />
-                        </View>
-
-                        <View style={styles.details}>
-                            <DetailRow label="Seat No." value="1422" />
-                            <DetailRow label="Form No." value={formId || '500003'} />
-                            <DetailRow label="Post Name" value="Clerk" />
-                            <DetailRow label="Full Name" value="MADHURI VIVEK MEHARE" />
-                            <DetailRow label="ENTRY TIME" value="08:00 AM" />
-                            <DetailRow label="GATE CLOSE TIME" value="10:30 AM" />
-                            <DetailRow
-                                label="Exam Date and Time"
-                                value="15/12/2024 11:00 AM to 12:30 PM"
-                            />
-                            <DetailRow
-                                label="Exam Center Name and Address"
-                                value="VIDYA BHARTI MAHAVIDYALAYA (MAIN BUILDING), CAMP ROAD, AMRAVATI, 444602 (MS)"
-                            />
-                        </View>
-                        {/* <View>
-                            <Text>
-                                Lorem ipsum dolor sit amet consectetur adipisicing elit. Quas
-                                ducimus accusantium iste ullam dolores id voluptatem inventore unde
-                                placeat beatae minus, rerum animi fugiat, distinctio voluptatum
-                                dolorem maiores eligendi iusto! Ratione, amet commodi, provident
-                                distinctio magni beatae vero tenetur iste, suscipit exercitationem
-                                vel doloremque. Exercitationem nihil inventore qui ab sint omnis
-                                consequuntur optio asperiores molestias vel laborum voluptatum
-                                quibusdam, ut soluta labore cum id molestiae enim tempore nesciunt
-                                cumque incidunt at libero? Quia, magni a. Unde libero laborum
-                                ducimus beatae culpa modi distinctio vero? Reiciendis impedit saepe,
-                                cumque doloribus et aspernatur delectus, dolores, reprehenderit
-                                perferendis mollitia cupiditate laudantium deserunt earum?
-                                Voluptatum, quasi numquam reiciendis expedita ad aspernatur
-                                explicabo deleniti, excepturi dolor nulla autem quidem nobis
-                                reprehenderit quisquam veritatis tempore, incidunt corrupti. Hic
-                                atque totam ullam ipsa qui obcaecati repudiandae nemo inventore
-                                aspernatur unde explicabo quam debitis illo voluptatem at repellat
-                                enim nisi adipisci, esse perspiciatis. Omnis saepe error expedita,
-                                eligendi suscipit qui numquam nisi eum, impedit natus dignissimos
-                                itaque illum quas assumenda reiciendis inventore veniam, aliquid
-                                nobis repellat sapiente voluptas! Reiciendis voluptatem, labore sed
-                                itaque facilis ipsum perferendis fugit, saepe laborum sint non
-                                deleniti illum eveniet iusto nulla tenetur praesentium officiis odit
-                                commodi excepturi, quas placeat laudantium. Minus, earum amet.
-                            </Text>
-                        </View> */}
+            {/* For capturing the camera photo */}
+            {Platform.OS === 'android' ? <StatusBar /> : null}
+            {isCameraOpen && (
+                <CameraView style={styles.fullScreenCamera} facing={facing} ref={cameraRef}>
+                    <View style={styles.buttonContainer}>
+                        <TouchableOpacity
+                            style={[styles.flipButton, styles.scannerButton]}
+                            onPress={handleTakePicture}>
+                            <Text style={[styles.text, styles.scannerButtonText]}>Take Photo</Text>
+                        </TouchableOpacity>
                     </View>
-                </ScrollView>
-            </ScrollView>
 
-            {/* Fixed Approve Button */}
-            <View style={styles.buttonWrapper}>
-                <TouchableOpacity style={styles.approveButton} onPress={handleApprove}>
-                    <Text style={styles.approveButtonText}>Approve</Text>
-                </TouchableOpacity>
-            </View>
+                    <TouchableOpacity
+                        style={[styles.closeButton]}
+                        onPress={() => setIsCameraOpen(false)}>
+                        <Text style={[styles.text, styles.scannerButtonText]}>
+                            <Svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 384 512"
+                                width={24} // Smaller size (adjust as needed)
+                                height={24} // Smaller size (adjust as needed)
+                            >
+                                <Path
+                                    fill="#FFFFFF"
+                                    d="M376.6 84.5c11.3-13.6 9.5-33.8-4.1-45.1s-33.8-9.5-45.1 4.1L192 206 56.6 43.5C45.3 29.9 25.1 28.1 11.5 39.4S-3.9 70.9 7.4 84.5L150.3 256 7.4 427.5c-11.3 13.6-9.5 33.8 4.1 45.1s33.8 9.5 45.1-4.1L192 306 327.4 468.5c11.3 13.6 31.5 15.4 45.1 4.1s15.4-31.5 4.1-45.1L233.7 256 376.6 84.5z"
+                                />
+                            </Svg>
+                        </Text>
+                    </TouchableOpacity>
+                </CameraView>
+            )}
+
+            {!isCameraOpen && (
+                <>
+                    <ScrollView contentContainerStyle={styles.scrollContainer}>
+                        <ScrollView style={styles.scrollView}>
+                            <View style={styles.ticket}>
+                                {/* Image placeholder for user photo and signature side by side */}
+                                <View style={styles.photoAndSignContainer}>
+                                    {/* User Photo */}
+                                    <Image
+                                        style={styles.photo}
+                                        source={{
+                                            uri: `${s3BucketUrl}/${hallticket.ca_photo}`,
+                                        }}
+                                        //  || 'https://pinnacle.works/wp-content/uploads/2022/06/dummy-image.jpg'
+                                    />
+
+                                    <TouchableOpacity onPress={() => setIsCameraOpen(true)}>
+                                        {/* Caputred image Image */}
+
+                                        {isPictureTaken || isCandidateApproved ? (
+                                            <Image
+                                                style={styles.photo}
+                                                source={{
+                                                    // uri: isPictureTaken ? photoUri : captureImagePlaceholder,
+                                                    uri:
+                                                        photoUri ||
+                                                        `${s3BucketUrl}/${hallticket.ca_approved_photo}`,
+                                                    // uri: isCandidateApproved
+                                                    //     ? `${s3BucketUrl}/${hallticket.ca_approved_photo}`
+                                                    //     : photoUri,
+                                                }}
+                                            />
+                                        ) : (
+                                            <Image
+                                                style={styles.photo}
+                                                source={require('../../assets/images/placeholders/capture-image-placeholder-img.jpg')}
+                                            />
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={styles.signContainer}>
+                                    <View style={styles.signWrapper}>
+                                        <Image
+                                            style={styles.signPhoto}
+                                            source={{
+                                                uri: `${s3BucketUrl}/${hallticket.ca_sign}`,
+                                            }}
+                                            //  || 'https://pinnacle.works/wp-content/uploads/2022/06/dummy-image.jpg'
+                                        />
+                                    </View>
+                                </View>
+
+                                <View style={styles.details}>
+                                    <DetailRow label="Seat No." value={hallticket.ca_roll_number} />
+                                    <DetailRow label="Form No." value={hallticket.id} />
+                                    <DetailRow
+                                        label="Post Name"
+                                        value={hallticket.ca_post_name?.toUpperCase()}
+                                    />
+                                    <DetailRow
+                                        label="Full Name"
+                                        value={`${candidate.ub_first_name} ${candidate.ub_middle_name} ${candidate.ub_last_name}`}
+                                    />
+
+                                    <DetailRow
+                                        label="Gender"
+                                        value={hallticket.ca_gender?.toUpperCase()}
+                                    />
+                                    <DetailRow label="ENTRY TIME" value={slot.entry_time} />
+                                    <DetailRow
+                                        label="GATE CLOSE TIME"
+                                        value={slot.gate_close_time}
+                                    />
+                                    <DetailRow
+                                        label="Exam Date and Time"
+                                        value={`${hallticket.exam_date} ${slot.time}`}
+                                    />
+                                    <DetailRow
+                                        label="Exam Center Name and Address"
+                                        value={`${hallticket.ca_center_name}, ${hallticket.ca_center_address}`}
+                                    />
+                                </View>
+                            </View>
+                        </ScrollView>
+                    </ScrollView>
+
+                    {/* Fixed Approve Button */}
+                    <View style={styles.buttonWrapper}>
+                        {!isCandidateApproved ? (
+                            <View
+                                style={{
+                                    flexDirection: 'row',
+                                    justifyContent: 'space-around',
+                                    width: '100%',
+                                }}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.approveButton,
+                                        isPictureTaken ? {} : styles.disabledButton,
+                                    ]} // Change style if disabled
+                                    onPress={handleApprove}
+                                    disabled={!isPictureTaken} // Disable the button if no picture is taken
+                                >
+                                    <Text
+                                        style={[
+                                            styles.approveButtonText,
+                                            isPictureTaken ? {} : styles.disabledText,
+                                        ]}>
+                                        Approve
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.snapButton}
+                                    onPress={() => setIsCameraOpen(true)}>
+                                    <Text style={styles.snapButtonText}>Take Snap</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <View
+                                style={{
+                                    flexDirection: 'row',
+                                    justifyContent: 'center',
+                                    width: '100%',
+                                }}>
+                                <TouchableOpacity
+                                    style={[styles.approveButton]} // Change style if disabled
+                                >
+                                    <Text style={[styles.approveButtonText]}>
+                                        This candidate is marked present
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
+                </>
+            )}
         </View>
     );
 };
@@ -122,6 +378,67 @@ const styles = StyleSheet.create({
         backgroundColor: '#f4f4f4',
         // backgroundColor : 'red'
     },
+
+    // CAMERA RELATED STYLES
+    message: {
+        textAlign: 'center',
+        paddingBottom: 10,
+    },
+    camera: {
+        flex: 1,
+    },
+    // Full-screen camera
+    fullScreenCamera: {
+        flex: 1,
+        width: '100%', // Ensures it takes full width
+        height: '100%', // Ensures it takes full height
+    },
+    buttonContainer: {
+        position: 'absolute',
+        bottom: 40, // 20px from the bottom of the screen
+        left: 20,
+        right: 20,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    flipButton: {
+        backgroundColor: '#007BFF', // Blue color for flip action
+    },
+
+    scannerButton: {
+        paddingVertical: 16, // Vertical padding for appropriate height
+        paddingHorizontal: 64, // Horizontal padding for appropriate width
+        borderRadius: 25, // Rounded corners
+        alignItems: 'center', // Center the content horizontally
+        justifyContent: 'center', // Center the content vertically
+        minWidth: 120, // Ensure buttons are at least this wide
+    },
+
+    // Text style for both buttons
+    text: {
+        color: '#FFF',
+        fontSize: 14, // Reasonable font size
+        fontWeight: '600', // Slightly bold for better visibility
+    },
+
+    // Close button with a different background color
+    closeButton: {
+        position: 'absolute', // Positions it absolutely within its parent
+        top: 10, // Adjust this value to place the button at the top of the parent
+        right: 10, // Adjust this value to place the button at the right of the parent
+        backgroundColor: '#DC3545', // Red color for close action
+        padding: 10, // Adjust padding for better button appearance
+        borderRadius: 50, // Optional: round the button for better appearance
+        zIndex: 1, // Ensure the button is above other elements if necessary
+    },
+    // Optional, if you want specific text styles for the buttons
+    scannerButtonText: {
+        color: '#FFF',
+    },
+    // -------------------------
+
     scrollContainer: {
         flexGrow: 1, // Ensure scrollable content takes full available height
         // backgroundColor: 'red',
@@ -147,20 +464,7 @@ const styles = StyleSheet.create({
         marginTop: 1,
         alignSelf: 'center', // This will center the ticket view horizontally
     },
-    // ticket: {
-    //     width: '100%',
-    //     backgroundColor: '#fff',
-    //     padding: 20,
-    //     borderWidth: 1,
-    //     borderColor: '#ccc',
-    //     shadowColor: '#000',
-    //     shadowOffset: { width: 0, height: 2 },
-    //     shadowOpacity: 0.2,
-    //     shadowRadius: 4,
-    //     marginTop: 1,
-    //     marginBottom: 1,
-    //     alignSelf: 'center', // This will center the ticket view horizontally
-    // },
+
     header: {
         alignItems: 'center',
         marginBottom: 20,
@@ -182,6 +486,13 @@ const styles = StyleSheet.create({
         paddingVertical: 5,
         marginBottom: 5, // Add space between rows
     },
+
+    signContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        paddingVertical: 5,
+        marginBottom: 5, // Add space between rows
+    },
     detailLabel: {
         fontWeight: 'bold',
         flex: 0.4, // Give more space to the label side
@@ -197,15 +508,27 @@ const styles = StyleSheet.create({
     photoAndSignContainer: {
         flexDirection: 'row', // This will place the images side by side
         justifyContent: 'space-between',
-        marginVertical: 20,
+        marginVertical: 10,
         width: '100%',
         paddingHorizontal: 10, // Add some padding to the sides
     },
+
     photo: {
-        width: 120,
-        height: 90,
+        width: 150,
+        height: 180,
         borderRadius: 5,
         backgroundColor: '#ccc',
+    },
+
+    signWrapper: {
+        width: 300,
+        height: 60,
+        borderRadius: 5,
+        backgroundColor: '#ccc',
+    },
+    signPhoto: {
+        width: '100%',
+        height: '100%',
     },
     signatureSection: {
         flexDirection: 'row',
@@ -226,6 +549,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 10,
         alignItems: 'center',
+        // backgroundColor: 'green',
     },
     approveButton: {
         backgroundColor: '#007bff',
@@ -240,117 +564,29 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
     },
+
+    disabledButton: {
+        backgroundColor: '#ddd', // Lighter color when disabled
+    },
+
+    disabledText: {
+        color: '#aaa', // Lighter text color when disabled
+    },
+
+    snapButton: {
+        backgroundColor: '#14b8a6',
+        paddingVertical: 10,
+        paddingHorizontal: 30,
+        borderRadius: 5,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    snapButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
 });
 
 export default CandidateInfo;
-
-// import axios from 'axios';
-// import React, { useEffect } from 'react';
-// import { Button, ScrollView, StyleSheet, View } from 'react-native';
-// import { WebView } from 'react-native-webview';
-// import Toast from 'react-native-toast-message';
-
-// // TypeScript: Define the prop types for the component
-// interface CandidateInfoProps {
-//     sourceUrl: string; // Expect sourceUrl to be a string
-// }
-
-// const CandidateInfo: React.FC<CandidateInfoProps> = ({ sourceUrl }) => {
-//     const handleMarkAttendance = async () => {
-//         try {
-//             const parsedUrl = new URL(sourceUrl);
-//             const params = new URLSearchParams(parsedUrl.search);
-
-//             const registrationId = params.get('r');
-//             const formId = params.get('f');
-
-//             // Simulate an axios request
-//             // const { data } = await axios.get('https://jsonplaceholder.typicode.com/todos/1');
-
-//             console.log("marking present here ......................")
-
-//             Toast.show({
-//                 type: 'success',
-//                 text1: 'Hello',
-//                 text2: 'This is something 👋',
-//             });
-//         } catch (err) {
-//             if (err?.response) {
-//                 console.error('Axios error:', err?.response);
-//             } else {
-//                 console.error('Error:', err);
-//             }
-//         }
-//     };
-
-//     // JavaScript code to ensure horizontal and vertical scrolling is enabled
-//     const injectedJavaScript = `
-//         document.body.style.overflow = 'auto'; // Enable scrolling
-//         document.body.style.whiteSpace = 'nowrap'; // Prevent wrapping of content horizontally
-//         true; // Ensure the injected JavaScript works
-//     `;
-
-//     useEffect(() => {
-//         Toast.show({
-//             type: 'success',
-//             text1: 'App Loaded',
-//             text2: 'The app has been initialized',
-//         });
-//     }, []);
-
-//     return (
-//         <View style={styles.container}>
-//             <ScrollView contentContainerStyle={styles.scrollView} style={styles.scrollWrapper}>
-//                 <WebView
-//                     style={styles.webView}
-//                     javaScriptEnabled={true}
-//                     domStorageEnabled={true}
-//                     source={{ uri: sourceUrl }}
-//                     allowsFullscreenVideo={true}
-//                     scalesPageToFit={false}
-//                     zoomable={true}
-//                     bounces={true}
-//                     scrollEnabled={true}
-//                     injectedJavaScript={injectedJavaScript}
-//                 />
-
-//                 <View style={styles.buttonWrapper}>
-//                     <Button title="Approve" onPress={handleMarkAttendance} />
-//                 </View>
-//             </ScrollView>
-//         </View>
-//     );
-// };
-
-// export default CandidateInfo;
-
-// const styles = StyleSheet.create({
-//     container: {
-//         flex: 1,
-//         justifyContent: 'center',
-//         alignItems: 'center',
-//         backgroundColor: 'white',
-//         width: '100%',
-//         height: '100%',
-//     },
-//     webView: {
-//         width: 1000, // Fixed width for web (desktop)
-//         height: 900, // Fixed height for web (desktop)
-//         borderWidth: 1,
-//         borderColor: '#ccc',
-//         borderRadius: 8,
-//     },
-//     scrollWrapper: {
-//         flex: 1,
-//         width: '100%',
-//         backgroundColor: 'white',
-//     },
-//     scrollView: {
-//         width: '100%',
-//         height: '100%',
-//     },
-//     buttonWrapper: {
-//         marginTop: 'auto',
-//         marginBottom: 10,
-//     },
-// });
