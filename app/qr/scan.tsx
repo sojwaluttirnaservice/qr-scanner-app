@@ -1,6 +1,6 @@
 import { CameraType, CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useDebugValue, useEffect, useState } from 'react';
 import { View, Text, Button, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import CryptoJS from 'crypto-js';
 import CandidateInfo from '../candidate/info';
@@ -26,9 +26,9 @@ const ScanQrPage = () => {
     }, []);
 
     // Decrypt function using AES with TypeScript typings
-    const decrypt = (encryptedData: string, key: string): string => {
-        // Decrypt the data using the AES algorithm and the key
-        const bytes = CryptoJS.AES.decrypt(encryptedData, key);
+    const decrypt = (encryptedData: string, secretKey: string): string => {
+        // Decrypt the data using the AES algorithm and the secretKey
+        const bytes = CryptoJS.AES.decrypt(encryptedData, secretKey);
         const originalText = bytes.toString(CryptoJS.enc.Utf8); // Convert bytes to string (UTF-8)
         return originalText;
     };
@@ -37,8 +37,9 @@ const ScanQrPage = () => {
         if (isScanning) return; // Prevent multiple scans
         setIsScanning(true); // Lock scanning
         try {
-            setScannedData(barcodeData);
-            const { data: _data } = await axios.post(barcodeData);
+            const decryptedUrlData = decrypt(barcodeData, 'form-filling-secret-key');
+            setScannedData(decryptedUrlData);
+            const { data: _data } = await axios.post(decryptedUrlData);
             setHallticketData(JSON.parse(_data.data));
             setIsQRScannerOpen(false);
         } catch (err) {

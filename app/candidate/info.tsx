@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import * as FileSystem from 'expo-file-system';
 import Svg, { Path } from 'react-native-svg';
-
+import * as ImageManipulator from 'expo-image-manipulator';
 import {
     View,
     Text,
@@ -50,14 +50,14 @@ const CandidateInfo = ({
     let [justApproved, setJustApproved] = useState(false);
 
     useEffect(() => {
-        if (hallticket.ca_is_approved != 'NO') {
+        // console.log('---------', hallticket.ca_is_approved, hallticket.ca_approved_photo);
+        console.log('---------', hallticket);
+
+        if (hallticket.ca_is_approved && hallticket.ca_is_approved != 'NO') {
             setIsCandidateApproved(true);
-            setIsPictureTaken(true);
+            setPhotoUri('');
         } else {
             setIsCandidateApproved(false);
-            setIsPictureTaken(true);
-
-
         }
     }, []);
 
@@ -106,6 +106,72 @@ const CandidateInfo = ({
     };
 
     // Handle the approve action (Placeholder for axios call later)
+    // const handleApprove = async () => {
+    //     try {
+    //         let baseUrl = process[0]?.p_form_filling_site;
+    //         let url = `${baseUrl}/api/save-approval-details`;
+    //         const sendData = new FormData();
+    //         sendData.set('rollNo', hallticket.ca_roll_number);
+    //         sendData.set('f_id', hallticket.id);
+    //         sendData.set('r_id', hallticket.ca_reg_id);
+
+    //         const compressedPhotoUri = await compressImage(photoUri as string);
+
+    //         // const fileInfo = await FileSystem.readAsStringAsync(photoUri, {
+    //         //     encoding: FileSystem.EncodingType.Base64,
+    //         // });
+
+    //         // Compress the photo before sending it
+    //         // Convert the base64 data to a binary string or directly send the photo file
+    //         const candidatePhotoFile = {
+    //             uri: compressedPhotoUri, // URI of the photo
+    //             type: 'image/jpeg', // Specify the file type
+    //             name: 'photo.jpg', // Specify the file name (optional)
+    //         };
+    //         sendData.set('candidatePhoto', candidatePhotoFile);
+
+    //         // Add axios call or any other action here later
+
+    //         const { data } = await axios.post(url, sendData, {
+    //             headers: {
+    //                 'Content-Type': 'multipart/form-data',
+    //             },
+    //         });
+
+    //         console.log(data);
+
+    //         const { success } = data;
+    //         if (success) {
+    //             setIsCandidateApproved(true);
+    //             setJustApproved(true);
+    //         }
+    //     } catch (err) {
+    //         console.error(err);
+    //     }
+    // };
+
+    const compressImage = async (
+        uri: string,
+        maxWidth: number = 800,
+        maxHeight: number = 800,
+        quality: number = 20
+    ) => {
+        try {
+            // Use expo-image-manipulator to resize the image
+            const result = await ImageManipulator.manipulateAsync(
+                uri,
+                [{ resize: { width: maxWidth, height: maxHeight } }],
+                { compress: quality / 100, format: ImageManipulator.SaveFormat.JPEG }
+            );
+
+            console.log('Compressed image URI:', result.uri); // Log the URI of the compressed image
+            return result.uri;
+        } catch (error) {
+            console.error('Error compressing image:', error);
+            throw new Error('Image compression failed');
+        }
+    };
+
     const handleApprove = async () => {
         try {
             let baseUrl = process[0]?.p_form_filling_site;
@@ -114,70 +180,33 @@ const CandidateInfo = ({
             sendData.set('rollNo', hallticket.ca_roll_number);
             sendData.set('f_id', hallticket.id);
             sendData.set('r_id', hallticket.ca_reg_id);
+            // Compress the image before sending it
+            const compressedPhotoUri = await compressImage(photoUri as string);
 
-            const fileInfo = await FileSystem.readAsStringAsync(photoUri, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
-
-            console.log(photoUri);
-            // Convert the base64 data to a binary string or directly send the photo file
+            // Prepare the compressed photo file
             const candidatePhotoFile = {
-                uri: photoUri, // URI of the photo
+                uri: compressedPhotoUri, // URI of the compressed image
                 type: 'image/jpeg', // Specify the file type
-                name: 'photo.jpg', // Specify the file name (optional)
+                name: 'photo.jpg', // Specify the file name
             };
             sendData.set('candidatePhoto', candidatePhotoFile);
 
-            // Add axios call or any other action here later
-
+            // Axios request to save the approval details
             const { data } = await axios.post(url, sendData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
             });
-
-            console.log(data);
 
             const { success } = data;
             if (success) {
                 setIsCandidateApproved(true);
                 setJustApproved(true);
+            } else {
+                console.log(success);
             }
         } catch (err) {
             console.error(err);
-        }
-    };
-    const handleApprove3 = async () => {
-        try {
-            let baseUrl = process[0]?.p_form_filling_site;
-            let url = `${baseUrl}/api/save-approval-details`;
-            const sendData = new FormData();
-
-            // Add data fields to the FormData
-            sendData.set('rollNo', hallticket.ca_roll_number);
-            sendData.set('f_id', hallticket.id);
-            sendData.set('r_id', hallticket.ca_reg_id);
-
-            // Add the photo as a file using URI (no need to convert it to Base64)
-            const candidatePhotoFile = {
-                uri: photoUri, // The URI of the image
-                type: 'image/jpeg', // MIME type of the file
-                name: 'photo.jpg', // The file name
-            };
-
-            // Append the photo file to FormData
-            sendData.set('candidatePhoto', candidatePhotoFile);
-
-            // Perform the API request
-            const { data } = await axios.post(url, sendData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
-
-            console.log('Response data:', data); // Log the response from the backend
-        } catch (err) {
-            console.error('Error uploading photo:', err);
         }
     };
 
@@ -231,10 +260,14 @@ const CandidateInfo = ({
                                         //  || 'https://pinnacle.works/wp-content/uploads/2022/06/dummy-image.jpg'
                                     />
 
-                                    <TouchableOpacity onPress={() => setIsCameraOpen(true)}>
+                                    <TouchableOpacity
+                                        disabled={isCandidateApproved}
+                                        onPress={() => {
+                                            setIsCameraOpen(true);
+                                        }}>
                                         {/* Caputred image Image */}
 
-                                        {isPictureTaken || isCandidateApproved ? (
+                                        {isCandidateApproved || isPictureTaken ? (
                                             <Image
                                                 style={styles.photo}
                                                 source={{

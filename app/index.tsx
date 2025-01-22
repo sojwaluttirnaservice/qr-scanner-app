@@ -1,10 +1,26 @@
 import { Text, View, TextInput, Button, StyleSheet, TouchableOpacity } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { router } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Toast from 'react-native-toast-message';
+import axios from 'axios';
+
+// import RNPickerSelect from 'react-native-picker-select';
+
+export const uttirnaUrl = `https://uttirna.in`;
 
 const HomePage = () => {
+    const [processList, setProcessList] = useState([]);
+    useEffect(() => {
+        (async function () {
+            const { data } = await axios.get(`${uttirnaUrl}/api/get-process-list`);
+
+            const resData = JSON.parse(data.data);
+
+            setProcessList(resData);
+        })();
+    }, []);
+
     const {
         control,
         handleSubmit,
@@ -16,16 +32,7 @@ const HomePage = () => {
         },
     });
 
-    useEffect(() => {
-        Toast.show({
-            type: 'success',
-            text1: 'Hello',
-            text2: 'This is something 👋',
-            visibilityTime: 10000,
-        }); 
-    }, []);
-
-    const onSubmit = (userData) => {
+    const onSubmit = (userData: any) => {
         try {
             // console.log(data);
 
@@ -42,6 +49,37 @@ const HomePage = () => {
         <View style={styles.container}>
             <Text style={styles.header}>Welcome...</Text>
             <Text style={styles.subHeader}>Login Form</Text>
+{/* 
+            <Controller
+                control={control}
+                name="processUrl"
+                rules={{ required: 'Username is required' }}
+                render={({ field: { onChange, onBlur, value } }) => (
+                    <View style={styles.inputContainer}>
+                        <RNPickerSelect
+                            style={{
+                                inputAndroid: styles.input,
+                                inputIOS: styles.input,
+                            }}
+                            onBlur={onBlur}
+                            onValueChange={(value) => onChange(value)} // handle change
+                            value={value}
+                            placeholder={{
+                                label: 'Select Username',
+                                value: null,
+                            }}
+                            items={[
+                                { label: 'Username 1', value: 'username1' },
+                                { label: 'Username 2', value: 'username2' },
+                                { label: 'Username 3', value: 'username3' },
+                            ]}
+                        />
+                        {errors.username && (
+                            <Text style={styles.error}>{errors.username.message}</Text>
+                        )}
+                    </View>
+                )}
+            /> */}
 
             <Controller
                 control={control}
